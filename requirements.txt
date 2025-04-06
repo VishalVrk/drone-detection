@@ -1,0 +1,7 @@
+opencv-python
+pillow
+torch>=1.7.0
+torchvision
+numpy
+yolov5
+Flask

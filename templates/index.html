@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drone Detection System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+  <div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row justify-between items-center mb-8">
+      <div class="flex items-center mb-4 md:mb-0">
+        <i class="fas fa-drone-alt text-red-500 text-4xl mr-3"></i>
+        <h1 class="text-3xl font-bold text-red-500">DRONE DETECTION SYSTEM</h1>
+      </div>
+      <div class="flex space-x-4">
+        <div id="status-indicator" class="flex items-center px-4 py-2 rounded-lg bg-gray-800">
+          <span id="status-icon" class="mr-2">⚪</span>
+          <span id="status-text">Initializing...</span>
+        </div>
+        <button id="toggle-logs" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors">
+          <i class="fas fa-list-ul mr-2"></i>Show Logs
+        </button>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Main Video Feed -->
+      <div class="lg:col-span-2">
+        <div class="bg-gray-800 rounded-xl p-4 shadow-lg">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Live Surveillance</h2>
+            <div class="flex space-x-2">
+              <button id="toggle-fullscreen" class="bg-gray-700 hover:bg-gray-600 p-2 rounded-lg">
+                <i class="fas fa-expand"></i>
+              </button>
+              <button id="toggle-zone" class="bg-gray-700 hover:bg-gray-600 p-2 rounded-lg">
+                <i class="fas fa-vector-square"></i>
+              </button>
+            </div>
+          </div>
+          <div class="relative border-2 border-red-500 rounded-lg overflow-hidden aspect-video">
+            <img src="{{ url_for('video') }}" class="w-full h-full object-cover" alt="Live drone detection feed" />
+            <div id="alert" class="absolute top-4 left-4 p-3 rounded-lg shadow text-sm font-semibold">
+              Loading status...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Statistics and Controls -->
+      <div class="lg:col-span-1">
+        <div class="bg-gray-800 rounded-xl p-4 shadow-lg h-full">
+          <h2 class="text-xl font-semibold mb-4">Detection Dashboard</h2>
+          
+          <!-- Statistics -->
+          <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-gray-700 p-4 rounded-lg text-center">
+              <p class="text-gray-400 text-sm">Total Detections</p>
+              <p id="total-detections" class="text-2xl font-bold">0</p>
+            </div>
+            <div class="bg-gray-700 p-4 rounded-lg text-center">
+              <p class="text-gray-400 text-sm">Zone Violations</p>
+              <p id="zone-violations" class="text-2xl font-bold">0</p>
+            </div>
+            <div class="bg-gray-700 p-4 rounded-lg text-center">
+              <p class="text-gray-400 text-sm">Confidence</p>
+              <p id="avg-confidence" class="text-2xl font-bold">0%</p>
+            </div>
+            <div class="bg-gray-700 p-4 rounded-lg text-center">
+              <p class="text-gray-400 text-sm">Uptime</p>
+              <p id="uptime" class="text-2xl font-bold">00:00:00</p>
+            </div>
+          </div>
+
+          <!-- Restricted Zone Configuration -->
+          <div class="bg-gray-700 p-4 rounded-lg mb-6">
+            <h3 class="text-lg font-semibold mb-2">Restricted Zone Settings</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm text-gray-400">X Position</label>
+                <input type="range" id="zone-x" min="0" max="640" value="50" class="w-full accent-red-500">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400">Y Position</label>
+                <input type="range" id="zone-y" min="0" max="480" value="50" class="w-full accent-red-500">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400">Width</label>
+                <input type="range" id="zone-width" min="50" max="500" value="200" class="w-full accent-red-500">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400">Height</label>
+                <input type="range" id="zone-height" min="50" max="400" value="200" class="w-full accent-red-500">
+              </div>
+            </div>
+            <button id="update-zone" class="mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg w-full transition-colors">
+              Update Restricted Zone
+            </button>
+          </div>
+
+          <!-- Detection Sensitivity -->
+          <div class="bg-gray-700 p-4 rounded-lg">
+            <h3 class="text-lg font-semibold mb-2">Detection Settings</h3>
+            <div class="mb-4">
+              <label class="block text-sm text-gray-400 mb-1">Confidence Threshold</label>
+              <div class="flex items-center">
+                <input type="range" id="confidence-threshold" min="10" max="95" value="50" class="flex-grow accent-red-500">
+                <span id="confidence-value" class="ml-2 text-sm">50%</span>
+              </div>
+            </div>
+            <button id="toggle-notifications" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg w-full transition-colors">
+              <i class="fas fa-bell mr-2"></i>Enable Notifications
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detection Logs -->
+    <div id="logs-panel" class="mt-6 bg-gray-800 rounded-xl p-4 shadow-lg hidden">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">Detection History</h2>
+        <div class="flex space-x-2">
+          <button id="clear-logs" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded-lg text-sm">
+            Clear Logs
+          </button>
+          <button id="export-logs" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded-lg text-sm">
+            Export CSV
+          </button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead class="text-gray-400 bg-gray-700">
+            <tr>
+              <th class="px-4 py-2 rounded-l-lg">Time</th>
+              <th class="px-4 py-2">Event</th>
+              <th class="px-4 py-2">Confidence</th>
+              <th class="px-4 py-2">Zone</th>
+              <th class="px-4 py-2 rounded-r-lg">Action</th>
+            </tr>
+          </thead>
+          <tbody id="detection-logs" class="text-gray-300">
+            <!-- Detection logs will be inserted here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global variables
+    let detectionCount = 0;
+    let zoneViolations = 0;
+    let confidenceSum = 0;
+    let notificationsEnabled = false;
+    let startTime = new Date();
+    let detectionLogs = [];
+    
+    // Update the status
+    function updateStatus() {
+      fetch("/status")
+        .then(res => res.json())
+        .then(data => {
+          const alertBox = document.getElementById("alert");
+          const statusIcon = document.getElementById("status-icon");
+          const statusText = document.getElementById("status-text");
+          
+          if (data.detected) {
+            // Update status indicator
+            statusIcon.innerHTML = "🔴";
+            statusText.innerHTML = "Drone Detected";
+            
+            // Update alert box
+            alertBox.innerHTML = `⚠️ <span class="text-red-600 font-bold">Drone Detected!</span><br><span class="text-gray-300 text-xs">Last seen: ${data.last_seen}</span>`;
+            alertBox.classList.remove("bg-green-100", "bg-white/80");
+            alertBox.classList.add("bg-red-100/90");
+            
+            // Update statistics
+            detectionCount++;
+            document.getElementById("total-detections").textContent = detectionCount;
+            
+            // Check if this is a new detection for logging
+            if (data.confidence) {
+              confidenceSum += parseFloat(data.confidence);
+              document.getElementById("avg-confidence").textContent = Math.round(confidenceSum / detectionCount) + "%";
+              
+              // Add to logs
+              const logEntry = {
+                time: data.last_seen,
+                event: "Drone Detected",
+                confidence: data.confidence + "%",
+                zone: data.in_restricted_zone ? "Yes" : "No",
+                id: Date.now()
+              };
+              
+              if (data.in_restricted_zone) {
+                zoneViolations++;
+                document.getElementById("zone-violations").textContent = zoneViolations;
+              }
+              
+              detectionLogs.unshift(logEntry);
+              updateDetectionLogs();
+              
+              // Send notification if enabled
+              if (notificationsEnabled && data.in_restricted_zone) {
+                sendNotification("Drone in Restricted Zone!", `A drone was detected in the restricted zone at ${data.last_seen}`);
+              }
+            }
+          } else {
+            // Update status indicator
+            statusIcon.innerHTML = "🟢";
+            statusText.innerHTML = "No Drones Detected";
+            
+            // Update alert box
+            alertBox.innerHTML = `✅ <span class="text-green-600 font-bold">No Drones Detected</span>`;
+            alertBox.classList.remove("bg-red-100/90", "bg-white/80");
+            alertBox.classList.add("bg-green-100/90");
+          }
+        });
+    }
+    
+    // Update the uptime counter
+    function updateUptime() {
+      const now = new Date();
+      const diff = now - startTime;
+      
+      const hours = Math.floor(diff / 3600000).toString().padStart(2, '0');
+      const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+      const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+      
+      document.getElementById("uptime").textContent = `${hours}:${minutes}:${seconds}`;
+    }
+    
+    // Update detection logs table
+    function updateDetectionLogs() {
+      const logsContainer = document.getElementById("detection-logs");
+      logsContainer.innerHTML = '';
+      
+      // Show only the last 20 logs
+      const logsToShow = detectionLogs.slice(0, 20);
+      
+      logsToShow.forEach(log => {
+        const row = document.createElement('tr');
+        row.className = 'border-b border-gray-700';
+        
+        row.innerHTML = `
+          <td class="px-4 py-3">${log.time}</td>
+          <td class="px-4 py-3">${log.event}</td>
+          <td class="px-4 py-3">${log.confidence}</td>
+          <td class="px-4 py-3">${log.zone === "Yes" ? 
+            '<span class="bg-red-900/50 text-red-200 px-2 py-1 rounded">Yes</span>' : 
+            '<span class="bg-green-900/50 text-green-200 px-2 py-1 rounded">No</span>'}</td>
+          <td class="px-4 py-3">
+            <button class="delete-log text-red-400 hover:text-red-300" data-id="${log.id}">
+              <i class="fas fa-trash"></i>
+            </button>
+          </td>
+        `;
+        
+        logsContainer.appendChild(row);
+      });
+      
+      // Add event listeners to delete buttons
+      document.querySelectorAll('.delete-log').forEach(button => {
+        button.addEventListener('click', function() {
+          const logId = parseInt(this.getAttribute('data-id'));
+          detectionLogs = detectionLogs.filter(log => log.id !== logId);
+          updateDetectionLogs();
+        });
+      });
+    }
+    
+    // Send browser notification
+    function sendNotification(title, body) {
+      if (!("Notification" in window)) {
+        console.log("This browser does not support notifications");
+        return;
+      }
+      
+      if (Notification.permission === "granted") {
+        new Notification(title, { body });
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            new Notification(title, { body });
+          }
+        });
+      }
+    }
+    
+    // Export logs to CSV
+    function exportLogs() {
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += "Time,Event,Confidence,In Restricted Zone\n";
+      
+      detectionLogs.forEach(log => {
+        csvContent += `${log.time},${log.event},${log.confidence},${log.zone}\n`;
+      });
+      
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `drone_detection_log_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    
+    // Toggle fullscreen
+    function toggleFullscreen() {
+      const videoContainer = document.querySelector('.aspect-video').parentElement;
+      
+      if (!document.fullscreenElement) {
+        if (videoContainer.requestFullscreen) {
+          videoContainer.requestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+    
+    // Update zone configuration
+    function updateZoneConfig() {
+      const x = parseInt(document.getElementById("zone-x").value);
+      const y = parseInt(document.getElementById("zone-y").value);
+      const width = parseInt(document.getElementById("zone-width").value);
+      const height = parseInt(document.getElementById("zone-height").value);
+      
+      fetch("/update_zone", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          x: x,
+          y: y,
+          width: width,
+          height: height
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert("Restricted zone updated successfully!");
+        } else {
+          alert("Failed to update restricted zone.");
+        }
+      });
+    }
+    
+    // Update confidence threshold
+    function updateConfidenceThreshold() {
+      const threshold = parseInt(document.getElementById("confidence-threshold").value);
+      document.getElementById("confidence-value").textContent = threshold + "%";
+      
+      fetch("/update_threshold", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          threshold: threshold / 100 // Convert to decimal
+        })
+      });
+    }
+
+    // Event listeners
+    document.addEventListener("DOMContentLoaded", function() {
+      // Initialize status updates
+      setInterval(updateStatus, 1000);
+      setInterval(updateUptime, 1000);
+      
+      // Toggle logs panel
+      document.getElementById("toggle-logs").addEventListener("click", function() {
+        const logsPanel = document.getElementById("logs-panel");
+        if (logsPanel.classList.contains("hidden")) {
+          logsPanel.classList.remove("hidden");
+          this.innerHTML = '<i class="fas fa-times mr-2"></i>Hide Logs';
+        } else {
+          logsPanel.classList.add("hidden");
+          this.innerHTML = '<i class="fas fa-list-ul mr-2"></i>Show Logs';
+        }
+      });
+      
+      // Clear logs
+      document.getElementById("clear-logs").addEventListener("click", function() {
+        detectionLogs = [];
+        updateDetectionLogs();
+      });
+      
+      // Export logs
+      document.getElementById("export-logs").addEventListener("click", exportLogs);
+      
+      // Toggle fullscreen
+      document.getElementById("toggle-fullscreen").addEventListener("click", toggleFullscreen);
+      
+      // Update zone
+      document.getElementById("update-zone").addEventListener("click", updateZoneConfig);
+      
+      // Update confidence threshold
+      document.getElementById("confidence-threshold").addEventListener("input", function() {
+        document.getElementById("confidence-value").textContent = this.value + "%";
+      });
+      document.getElementById("confidence-threshold").addEventListener("change", updateConfidenceThreshold);
+      
+      // Toggle notifications
+      document.getElementById("toggle-notifications").addEventListener("click", function() {
+        if (notificationsEnabled) {
+          notificationsEnabled = false;
+          this.innerHTML = '<i class="fas fa-bell mr-2"></i>Enable Notifications';
+          this.classList.remove("bg-red-600", "hover:bg-red-700");
+          this.classList.add("bg-blue-600", "hover:bg-blue-700");
+        } else {
+          if (Notification.permission !== "granted") {
+            Notification.requestPermission();
+          }
+          notificationsEnabled = true;
+          this.innerHTML = '<i class="fas fa-bell-slash mr-2"></i>Disable Notifications';
+          this.classList.remove("bg-blue-600", "hover:bg-blue-700");
+          this.classList.add("bg-red-600", "hover:bg-red-700");
+        }
+      });
+    });
+  </script>
+</body>
+</html>
