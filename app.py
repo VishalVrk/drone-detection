@@ -1,9 +1,8 @@
-from flask import Flask, render_template, Response
-import cv2
+from flask import Flask, render_template, request, jsonify
 import torch
+from PIL import Image
+import io
 import numpy as np
-import threading
-import time
 
 app = Flask(__name__)
 
@@ -11,93 +10,58 @@ app = Flask(__name__)
 model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt')
 model.conf = 0.5  # Confidence threshold
 
-# Global variables
-camera = None
-output_frame = None
-lock = threading.Lock()
-
-def initialize_camera():
-    global camera
-    camera = cv2.VideoCapture(0)  # Use 0 for webcam
-    return camera.isOpened()
-
-def detect_drones():
-    global camera, output_frame, lock
-    
-    while True:
-        if camera is None or not camera.isOpened():
-            if not initialize_camera():
-                print("Error: Could not initialize camera")
-                time.sleep(5)
-                continue
-
-        success, frame = camera.read()
-        if not success:
-            print("Error: Failed to read frame")
-            time.sleep(1)
-            continue
-
-        # Create a copy of the frame for drawing
-        display_frame = frame.copy()
-        
-        # Run inference with YOLOv5
-        results = model(frame)
-        
-        # Process detections
-        detections = results.xyxy[0].cpu().numpy()  # xmin, ymin, xmax, ymax, confidence, class
-        
-        for det in detections:
-            x1, y1, x2, y2, conf, cls = det
-            
-            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-            
-            # Draw detection box
-            cv2.rectangle(display_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            
-            # Add confidence label
-            label = f"{conf*100:.1f}%"
-            cv2.putText(display_frame, label, (x1, y1-10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-        
-        # Update the output frame
-        with lock:
-            output_frame = display_frame.copy()
-        
-        # Small delay
-        time.sleep(0.03)  # ~30 FPS
-
-def generate_frames():
-    global output_frame, lock
-    
-    while True:
-        with lock:
-            if output_frame is None:
-                continue
-            
-            # Encode the frame
-            (flag, encoded_image) = cv2.imencode(".jpg", output_frame)
-            
-            if not flag:
-                continue
-        
-        # Yield the output frame in byte format
-        yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + 
-              bytearray(encoded_image) + b'\r\n')
-
 @app.route('/')
 def index():
-    return render_template('index1.html')
+    return render_template('index1.html')  # Your frontend HTML page
 
-@app.route('/video_feed')
-def video_feed():
-    return Response(generate_frames(),
-                   mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/detect', methods=['POST'])
+def detect_image():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+
+    try:
+        # Get the image from the request
+        image_file = request.files['image']
+        image_bytes = image_file.read()
+        img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        
+        # Print image size for debugging
+        print(f"Processing image of size: {img.size}")
+
+        # Run YOLOv5 detection
+        results = model(img)
+        
+        # Extract bounding box results - with explicit debugging
+        pandas_results = results.pandas().xyxy[0]
+        print(f"YOLOv5 found {len(pandas_results)} detections")
+        
+        # Use to_json() for debug print
+        print(f"Raw detection data: {pandas_results.to_json(orient='records')}")
+        
+        # Convert to dict with explicit type conversion
+        raw_detections = pandas_results.to_dict(orient='records')
+        
+        # Create formatted detections with explicit float conversion
+        formatted_detections = []
+        for det in raw_detections:
+            print(f"Processing detection: {det}")
+            formatted_det = {
+                'xmin': float(det['xmin']),
+                'ymin': float(det['ymin']),
+                'xmax': float(det['xmax']),
+                'ymax': float(det['ymax']),
+                'confidence': float(det['confidence']),
+                'name': str(det['name'])
+            }
+            print(f"Formatted detection: {formatted_det}")
+            formatted_detections.append(formatted_det)
+
+        print(f"Returning {len(formatted_detections)} detections")
+        return jsonify(formatted_detections)
+        
+    except Exception as e:
+        print(f"Error in detection: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
-    # Start the detection thread
-    t = threading.Thread(target=detect_drones)
-    t.daemon = True
-    t.start()
-    
-    # Run the Flask app
-    app.run(host='0.0.0.0', port=5030, debug=True, threaded=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=5034, debug=True)
