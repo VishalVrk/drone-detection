@@ -12,7 +12,7 @@ model.conf = 0.5  # Confidence threshold
 
 @app.route('/')
 def index():
-    return render_template('index1.html')  # Your frontend HTML page
+    return render_template('index.html')  # Your frontend HTML page
 
 @app.route('/detect', methods=['POST'])
 def detect_image():
